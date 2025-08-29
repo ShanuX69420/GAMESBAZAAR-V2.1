@@ -67,6 +67,55 @@ fastify.get('/api/games', async (request, reply) => {
   }
 })
 
+// Get single game by slug
+fastify.get('/api/games/:slug', async (request, reply) => {
+  try {
+    const { slug } = request.params as { slug: string }
+    
+    const game = await prisma.game.findFirst({
+      where: { 
+        slug,
+        active: true 
+      },
+      include: {
+        categories: {
+          where: { active: true },
+          include: {
+            _count: {
+              select: {
+                listings: {
+                  where: { active: true }
+                }
+              }
+            }
+          }
+        }
+      }
+    })
+
+    if (!game) {
+      reply.status(404)
+      return { error: 'Game not found' }
+    }
+
+    // Transform the response to include listing count
+    const gameWithCounts = {
+      ...game,
+      categories: game.categories.map(category => ({
+        ...category,
+        listingCount: category._count.listings,
+        _count: undefined
+      }))
+    }
+
+    return gameWithCounts
+  } catch (error) {
+    console.error('Error fetching game:', error)
+    reply.status(500)
+    return { error: 'Failed to fetch game' }
+  }
+})
+
 // Authentication Routes
 fastify.post('/api/auth/register', async (request, reply) => {
   try {
