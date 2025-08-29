@@ -512,11 +512,25 @@ fastify.post('/api/listings', {
   }
 })
 
-// Get listings by category
+// Get listings by category with filtering and sorting
 fastify.get('/api/games/:gameSlug/:categorySlug/listings', async (request, reply) => {
   try {
     const { gameSlug, categorySlug } = request.params as { gameSlug: string, categorySlug: string }
-    const { page = '1', limit = '20' } = request.query as { page?: string, limit?: string }
+    const { 
+      page = '1', 
+      limit = '20', 
+      search = '', 
+      sort = 'newest',
+      delivery_type = '',
+      stock_type = ''
+    } = request.query as { 
+      page?: string, 
+      limit?: string,
+      search?: string,
+      sort?: string,
+      delivery_type?: string,
+      stock_type?: string
+    }
     
     const pageNum = parseInt(page)
     const limitNum = parseInt(limit)
@@ -537,17 +551,67 @@ fastify.get('/api/games/:gameSlug/:categorySlug/listings', async (request, reply
       return { error: 'Category not found' }
     }
 
+    // Build where clause with filters
+    const whereClause: any = {
+      gameId: game.id,
+      categoryId: category.id,
+      active: true,
+      hidden: false
+    }
+
+    // Add search filter
+    if (search && search.trim()) {
+      whereClause.OR = [
+        {
+          title: {
+            contains: search.trim(),
+            mode: 'insensitive'
+          }
+        },
+        {
+          description: {
+            contains: search.trim(),
+            mode: 'insensitive'
+          }
+        }
+      ]
+    }
+
+    // Add delivery type filter
+    if (delivery_type && delivery_type !== 'all') {
+      whereClause.deliveryType = delivery_type
+    }
+
+    // Add stock type filter
+    if (stock_type && stock_type !== 'all') {
+      whereClause.stockType = stock_type
+    }
+
+    // Build orderBy clause
+    let orderBy: any[] = []
+    
+    switch (sort) {
+      case 'price_low':
+        orderBy = [{ price: 'asc' }]
+        break
+      case 'price_high':
+        orderBy = [{ price: 'desc' }]
+        break
+      case 'oldest':
+        orderBy = [{ createdAt: 'asc' }]
+        break
+      case 'newest':
+      default:
+        orderBy = [{ createdAt: 'desc' }]
+        break
+    }
+
+    // Always prioritize boosted listings first
+    orderBy.unshift({ boostedAt: { sort: 'desc', nulls: 'last' } })
+
     const listings = await prisma.listing.findMany({
-      where: {
-        gameId: game.id,
-        categoryId: category.id,
-        active: true,
-        hidden: false
-      },
-      orderBy: [
-        { boostedAt: { sort: 'desc', nulls: 'last' } },
-        { createdAt: 'desc' }
-      ],
+      where: whereClause,
+      orderBy,
       skip,
       take: limitNum,
       include: {
@@ -569,12 +633,7 @@ fastify.get('/api/games/:gameSlug/:categorySlug/listings', async (request, reply
     })
 
     const total = await prisma.listing.count({
-      where: {
-        gameId: game.id,
-        categoryId: category.id,
-        active: true,
-        hidden: false
-      }
+      where: whereClause
     })
 
     return {
@@ -589,6 +648,7 @@ fastify.get('/api/games/:gameSlug/:categorySlug/listings', async (request, reply
       category
     }
   } catch (error) {
+    console.error('Error fetching listings:', error)
     reply.status(500)
     return { error: 'Failed to fetch listings' }
   }
