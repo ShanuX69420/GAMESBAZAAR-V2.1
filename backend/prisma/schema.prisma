@@ -74,22 +74,23 @@ model Category {
 }
 
 model Listing {
-  id           String   @id @default(cuid())
-  sellerId     String   @map("seller_id")
-  gameId       String   @map("game_id")
-  categoryId   String   @map("category_id")
-  title        String
-  price        Decimal  @db.Decimal(10, 2)
-  description  String
-  deliveryType String   @map("delivery_type") // instant, manual
-  stockType    String   @map("stock_type") // limited, unlimited
-  quantity     Int?
-  images       String[] // URLs
-  customFields Json     @map("custom_fields") // Dynamic fields based on category
-  boostedAt    DateTime? @map("boosted_at")
-  hidden       Boolean  @default(false)
-  active       Boolean  @default(true)
-  createdAt    DateTime @default(now()) @map("created_at")
+  id              String   @id @default(cuid())
+  sellerId        String   @map("seller_id")
+  gameId          String   @map("game_id")
+  categoryId      String   @map("category_id")
+  title           String
+  price           Decimal  @db.Decimal(10, 2)
+  description     String
+  deliveryType    String   @map("delivery_type") // instant, manual
+  stockType       String   @map("stock_type") // limited, unlimited
+  quantity        Int?
+  images          String[] // URLs
+  customFields    Json     @map("custom_fields") // Dynamic fields based on category
+  deliveryContent String?  @map("delivery_content") // Automatic delivery content for instant items
+  boostedAt       DateTime? @map("boosted_at")
+  hidden          Boolean  @default(false)
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now()) @map("created_at")
   
   // Relations
   seller   User     @relation(fields: [sellerId], references: [id])

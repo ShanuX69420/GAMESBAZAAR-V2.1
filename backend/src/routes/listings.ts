@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify'
 import { PrismaClient } from '@prisma/client'
+import { AutomatedDeliveryService } from '../services/automatedDelivery'
 
 const prisma = new PrismaClient()
 
@@ -142,7 +143,8 @@ async function listingsRoutes(fastify: FastifyInstance) {
         stockType, 
         quantity, 
         images, 
-        customFields 
+        customFields,
+        deliveryContent 
       } = request.body as {
         gameId: string
         categoryId: string
@@ -154,6 +156,7 @@ async function listingsRoutes(fastify: FastifyInstance) {
         quantity?: number
         images?: string[]
         customFields?: any
+        deliveryContent?: string
       }
 
       // Validation
@@ -185,6 +188,15 @@ async function listingsRoutes(fastify: FastifyInstance) {
       if (images && images.length > 5) {
         reply.status(400)
         return { error: 'Maximum 5 images allowed per listing' }
+      }
+
+      // Validate delivery content for instant delivery
+      if (deliveryType === 'instant') {
+        const validation = AutomatedDeliveryService.validateDeliveryContent(deliveryContent)
+        if (!validation.isValid) {
+          reply.status(400)
+          return { error: validation.error }
+        }
       }
 
       // Verify game and category exist
@@ -232,6 +244,7 @@ async function listingsRoutes(fastify: FastifyInstance) {
           quantity: stockType === 'limited' ? quantity : null,
           images: images || [],
           customFields: customFields || {},
+          deliveryContent: deliveryType === 'instant' ? deliveryContent?.trim() || null : null,
           hidden: user?.vacationMode || false, // Auto-hide if in vacation mode
           active: true
         },
@@ -274,7 +287,8 @@ async function listingsRoutes(fastify: FastifyInstance) {
         stockType, 
         quantity, 
         images, 
-        customFields 
+        customFields,
+        deliveryContent 
       } = request.body as {
         title?: string
         price?: number
@@ -284,6 +298,7 @@ async function listingsRoutes(fastify: FastifyInstance) {
         quantity?: number
         images?: string[]
         customFields?: any
+        deliveryContent?: string
       }
 
       // Get existing listing
@@ -329,6 +344,16 @@ async function listingsRoutes(fastify: FastifyInstance) {
         return { error: 'Maximum 5 images allowed per listing' }
       }
 
+      // Validate delivery content for instant delivery
+      const finalDeliveryType = deliveryType || existingListing.deliveryType
+      if (finalDeliveryType === 'instant' && deliveryContent !== undefined) {
+        const validation = AutomatedDeliveryService.validateDeliveryContent(deliveryContent)
+        if (!validation.isValid) {
+          reply.status(400)
+          return { error: validation.error }
+        }
+      }
+
       const updatedListing = await prisma.listing.update({
         where: { id: listingId },
         data: {
@@ -341,7 +366,10 @@ async function listingsRoutes(fastify: FastifyInstance) {
             quantity: finalStockType === 'limited' ? quantity : null 
           }),
           ...(images && { images }),
-          ...(customFields && { customFields })
+          ...(customFields && { customFields }),
+          ...(deliveryContent !== undefined && { 
+            deliveryContent: finalDeliveryType === 'instant' ? deliveryContent?.trim() || null : null 
+          })
         },
         include: {
           game: {

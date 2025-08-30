@@ -4,6 +4,8 @@ import jwt from '@fastify/jwt'
 import { PrismaClient } from '@prisma/client'
 import bcrypt from 'bcryptjs'
 import { Server as SocketIOServer } from 'socket.io'
+import { AutomatedDeliveryService } from './services/automatedDelivery'
+import { socketManager } from './sockets/socketManager'
 
 const prisma = new PrismaClient()
 const fastify = Fastify({
@@ -1046,6 +1048,13 @@ fastify.patch('/api/orders/:orderId/paid', {
       }
     })
 
+    // Try automated delivery if applicable
+    const automatedDeliverySuccessful = await AutomatedDeliveryService.processAutomatedDelivery(orderId)
+    
+    if (automatedDeliverySuccessful) {
+      console.log(`✅ Automated delivery processed for order ${orderId}`)
+    }
+
     return {
       message: 'Order marked as paid successfully',
       order: updatedOrder
@@ -1917,6 +1926,9 @@ const start = async () => {
         credentials: true
       }
     })
+
+    // Initialize socket manager
+    socketManager.setIo(io)
 
     // Socket.io connection handling
     io.on('connection', (socket) => {
