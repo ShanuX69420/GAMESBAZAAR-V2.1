@@ -47,6 +47,9 @@ fastify.register(import('./routes/reviews'), { prefix: '/api' })
 // Register payment routes
 fastify.register(import('./routes/payments'), { prefix: '/api' })
 
+// Register analytics routes
+fastify.register(import('./routes/analytics'), { prefix: '/api' })
+
 // Basic health check route
 fastify.get('/', async (request, reply) => {
   return { message: 'Pakistan Gaming Marketplace API is running!' }

@@ -608,3 +608,115 @@
 - Error handling works for all edge cases
 
 **Status**: ✅ COMPLETED - Complete payment gateway integration ready for production!
+
+---
+
+## 🚀 PHASE 3: ADVANCED FEATURES - IN PROGRESS
+
+### Step 1: Dark/Light Theme Toggle Implementation ✅
+**Completed**: August 30, 2025
+
+**Theme System Implementation:**
+- ✅ next-themes integration with custom ThemeProvider component
+- ✅ ThemeToggle component with moon/sun icons and smooth transitions
+- ✅ System theme detection with manual override capability
+- ✅ Theme persistence across page navigation and browser sessions
+- ✅ Proper hydration handling to prevent theme flash
+
+**Navigation Bar Enhancement:**
+- ✅ Created comprehensive Navbar component with theme toggle integration
+- ✅ Responsive design with mobile-optimized navigation
+- ✅ User authentication status display (balance, username, logout)
+- ✅ Quick navigation links (Home, Games, Messages, Profile)
+- ✅ Theme toggle prominently displayed for easy access
+
+**Page Integration:**
+- ✅ Homepage updated with navbar and theme toggle functionality
+- ✅ Games page integrated with navbar and theme support
+- ✅ Consistent theme application across all existing pages
+- ✅ Proper component layout with navbar wrapper pattern
+- ✅ Mobile-responsive design maintained across all screen sizes
+
+**Technical Features:**
+- ✅ Theme toggle button with visual feedback (moon ↔ sun icons)
+- ✅ Automatic theme detection based on system preferences
+- ✅ Manual theme override with user choice persistence
+- ✅ Smooth theme transitions without layout shift
+- ✅ Proper SSR handling to prevent hydration mismatches
+
+**Manual Testing**: ✅ All test cases passed
+- Theme toggle button visible and functional in navbar
+- Clicking toggles between light and dark modes successfully
+- Theme persists across page navigation (homepage, games, etc.)
+- Theme persists after page refresh and browser restart
+- All UI components properly styled in both themes
+- Responsive design works correctly on mobile and desktop
+- No theme flashing or hydration issues observed
+
+**Status**: ✅ COMPLETED - Dark/light theme toggle fully implemented and working!
+
+### Step 2: Analytics Dashboard for Admin Panel ✅
+**Completed**: August 30, 2025
+
+**Backend Analytics API Implementation:**
+- ✅ Complete analytics routes file (`backend/src/routes/analytics.ts`)
+- ✅ 5 comprehensive API endpoints for admin analytics:
+  - `/api/admin/analytics/overview` - Platform overview with key metrics
+  - `/api/admin/analytics/revenue-chart` - Daily revenue data (last 30 days)
+  - `/api/admin/analytics/top-games` - Top selling games with performance metrics
+  - `/api/admin/analytics/top-sellers` - Top performing sellers with earnings data
+  - `/api/admin/analytics/health-metrics` - Platform health and activity metrics
+- ✅ Admin-only middleware protection on all analytics endpoints
+- ✅ Optimized database queries with proper aggregations and joins
+- ✅ Real-time metrics calculation (revenue, users, orders, listings)
+- ✅ Activity tracking and user engagement analytics
+
+**Frontend Admin Dashboard Implementation:**
+- ✅ Complete admin dashboard page at `/admin` with role-based access
+- ✅ Admin navigation link in navbar (visible only to admin users)
+- ✅ Three comprehensive dashboard tabs:
+  - **Overview Tab**: Key metrics cards, order breakdown, user statistics
+  - **Platform Health Tab**: Dispute rates, response times, completion rates
+  - **Recent Activity Tab**: Latest orders, registrations, listings, disputes
+- ✅ Beautiful UI with Shadcn components (Cards, Tabs, Badges)
+- ✅ Real-time data fetching with proper error handling
+- ✅ Responsive design for desktop and mobile
+
+**Key Analytics Metrics Implemented:**
+- ✅ **Financial Analytics**: Total revenue, daily/weekly/monthly breakdowns, commission tracking
+- ✅ **User Analytics**: Total users, growth metrics, verification status, user types
+- ✅ **Order Analytics**: Order status breakdown, completion rates, dispute tracking
+- ✅ **Listing Analytics**: Active listings, hidden listings, boost statistics
+- ✅ **Platform Health**: Active users (daily/weekly/monthly), response times, activity feed
+
+**Admin Dashboard Features:**
+- ✅ Revenue cards with growth indicators (PKR 656 total revenue displayed)
+- ✅ User statistics breakdown (4 total users: 2 verified, 1 regular, 1 admin)
+- ✅ Order status visualization (13 total orders: 2 completed, 10 pending)
+- ✅ Real-time data synchronization with backend metrics
+- ✅ Professional dashboard layout with proper spacing and typography
+
+**Security & Access Control:**
+- ✅ Admin-only route protection (non-admin users redirected)
+- ✅ JWT authentication for all analytics endpoints
+- ✅ Proper middleware validation for admin role verification
+- ✅ Secure data aggregation without exposing sensitive information
+
+**Manual Testing**: ✅ All test cases passed
+- Admin dashboard loads within 2-3 seconds with real data
+- All analytics cards display correct metrics without errors
+- Overview tab shows: PKR 656 revenue, 4 users, 13 orders, 4 listings
+- Order breakdown correctly displays: 15% completion rate (2/13 orders)
+- User statistics properly categorized by verification and role
+- Responsive design works perfectly on all screen sizes
+- Admin-only access control verified (requires admin role)
+- Navigation flows work smoothly between all tabs
+
+**Production Ready Features:**
+- ✅ Comprehensive error handling and fallback states
+- ✅ Loading states and smooth transitions
+- ✅ Real database integration with live marketplace data
+- ✅ Scalable architecture for additional metrics
+- ✅ TypeScript interfaces for type safety
+
+**Status**: ✅ COMPLETED - Analytics Dashboard fully implemented and production-ready!
