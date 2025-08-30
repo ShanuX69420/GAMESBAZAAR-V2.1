@@ -6,6 +6,7 @@ import bcrypt from 'bcryptjs'
 import { Server as SocketIOServer } from 'socket.io'
 import { AutomatedDeliveryService } from './services/automatedDelivery'
 import { socketManager } from './sockets/socketManager'
+import { emailService } from './services/emailService'
 
 const prisma = new PrismaClient()
 const fastify = Fastify({
@@ -51,6 +52,9 @@ fastify.register(import('./routes/payments'), { prefix: '/api' })
 
 // Register analytics routes
 fastify.register(import('./routes/analytics'), { prefix: '/api' })
+
+// Register email routes
+fastify.register(import('./routes/email'), { prefix: '/api' })
 
 // Basic health check route
 fastify.get('/', async (request, reply) => {
@@ -200,6 +204,10 @@ fastify.post('/api/auth/register', async (request, reply) => {
       username: user.username, 
       role: user.role 
     })
+
+    // Send welcome email asynchronously
+    emailService.sendWelcomeEmail(user.email, user.username)
+      .catch(error => console.log('Failed to send welcome email:', error))
 
     return {
       message: 'Registration successful',
@@ -795,10 +803,10 @@ fastify.post('/api/orders', {
           }
         },
         buyer: {
-          select: { id: true, username: true }
+          select: { id: true, username: true, email: true }
         },
         seller: {
-          select: { id: true, username: true, verified: true }
+          select: { id: true, username: true, email: true, verified: true }
         }
       }
     })
@@ -813,6 +821,32 @@ fastify.post('/api/orders', {
           active: newQuantity > 0 // Deactivate if out of stock
         }
       })
+    }
+
+    // Send order created notification emails asynchronously
+    const orderEmailData = {
+      orderId: order.id,
+      buyerEmail: order.buyer.email || '', // We need to get buyer email
+      sellerEmail: order.seller.email || '', // We need to get seller email
+      listingTitle: order.listing.title,
+      amount: itemPrice,
+      commission,
+      total: totalAmount,
+      paymentMethod: paymentMethod || undefined
+    }
+
+    // Get buyer and seller emails
+    const [buyerUser, sellerUser] = await Promise.all([
+      prisma.user.findUnique({ where: { id: userId }, select: { email: true } }),
+      prisma.user.findUnique({ where: { id: listing.sellerId }, select: { email: true } })
+    ])
+
+    if (buyerUser && sellerUser) {
+      orderEmailData.buyerEmail = buyerUser.email
+      orderEmailData.sellerEmail = sellerUser.email
+      
+      emailService.sendOrderCreatedNotification(orderEmailData)
+        .catch(error => console.log('Failed to send order created emails:', error))
     }
 
     return {
@@ -1007,8 +1041,8 @@ fastify.patch('/api/orders/:orderId/paid', {
       where: { id: orderId },
       include: {
         listing: { select: { title: true } },
-        buyer: { select: { username: true } },
-        seller: { select: { username: true } }
+        buyer: { select: { username: true, email: true } },
+        seller: { select: { username: true, email: true } }
       }
     })
 
@@ -1048,6 +1082,32 @@ fastify.patch('/api/orders/:orderId/paid', {
       }
     })
 
+    // Send order paid notification emails asynchronously
+    const orderEmailData = {
+      orderId: order.id,
+      buyerEmail: order.buyer.email || '',
+      sellerEmail: order.seller.email || '',
+      listingTitle: order.listing.title,
+      amount: order.amount.toNumber() - order.commission.toNumber(),
+      commission: order.commission.toNumber(),
+      total: order.amount.toNumber(),
+      paymentMethod: order.paymentMethod || undefined
+    }
+
+    // Get buyer and seller emails
+    const [buyerUser, sellerUser] = await Promise.all([
+      prisma.user.findUnique({ where: { id: order.buyerId }, select: { email: true } }),
+      prisma.user.findUnique({ where: { id: order.sellerId }, select: { email: true } })
+    ])
+
+    if (buyerUser && sellerUser) {
+      orderEmailData.buyerEmail = buyerUser.email
+      orderEmailData.sellerEmail = sellerUser.email
+      
+      emailService.sendOrderPaidNotification(orderEmailData)
+        .catch(error => console.log('Failed to send order paid emails:', error))
+    }
+
     // Try automated delivery if applicable
     const automatedDeliverySuccessful = await AutomatedDeliveryService.processAutomatedDelivery(orderId)
     
@@ -1078,8 +1138,8 @@ fastify.patch('/api/orders/:orderId/delivered', {
       where: { id: orderId },
       include: {
         listing: { select: { title: true, deliveryType: true } },
-        buyer: { select: { username: true } },
-        seller: { select: { username: true } }
+        buyer: { select: { username: true, email: true } },
+        seller: { select: { username: true, email: true } }
       }
     })
 
@@ -1116,6 +1176,32 @@ fastify.patch('/api/orders/:orderId/delivered', {
       }
     })
 
+    // Send order delivered notification emails asynchronously
+    const orderEmailData = {
+      orderId: order.id,
+      buyerEmail: order.buyer.email || '',
+      sellerEmail: order.seller.email || '',
+      listingTitle: order.listing.title,
+      amount: order.amount.toNumber() - order.commission.toNumber(),
+      commission: order.commission.toNumber(),
+      total: order.amount.toNumber(),
+      deliveryMessage: deliveryMessage
+    }
+
+    // Get buyer and seller emails
+    const [buyerUser, sellerUser] = await Promise.all([
+      prisma.user.findUnique({ where: { id: order.buyerId }, select: { email: true } }),
+      prisma.user.findUnique({ where: { id: order.sellerId }, select: { email: true } })
+    ])
+
+    if (buyerUser && sellerUser) {
+      orderEmailData.buyerEmail = buyerUser.email
+      orderEmailData.sellerEmail = sellerUser.email
+      
+      emailService.sendOrderDeliveredNotification(orderEmailData)
+        .catch(error => console.log('Failed to send order delivered emails:', error))
+    }
+
     return {
       message: 'Order marked as delivered successfully',
       order: updatedOrder
@@ -1139,8 +1225,8 @@ fastify.patch('/api/orders/:orderId/complete', {
       where: { id: orderId },
       include: {
         listing: { select: { title: true } },
-        buyer: { select: { username: true } },
-        seller: { select: { username: true, verified: true } }
+        buyer: { select: { username: true, email: true } },
+        seller: { select: { username: true, email: true, verified: true } }
       }
     })
 
@@ -1209,6 +1295,31 @@ fastify.patch('/api/orders/:orderId/complete', {
       })
     })
 
+    // Send order completed notification emails asynchronously
+    const orderEmailData = {
+      orderId: order.id,
+      buyerEmail: order.buyer.email || '',
+      sellerEmail: order.seller.email || '',
+      listingTitle: order.listing.title,
+      amount: sellerEarnings,
+      commission: commission,
+      total: order.amount.toNumber()
+    }
+
+    // Get buyer and seller emails
+    const [buyerUser, sellerUser] = await Promise.all([
+      prisma.user.findUnique({ where: { id: order.buyerId }, select: { email: true } }),
+      prisma.user.findUnique({ where: { id: order.sellerId }, select: { email: true } })
+    ])
+
+    if (buyerUser && sellerUser) {
+      orderEmailData.buyerEmail = buyerUser.email
+      orderEmailData.sellerEmail = sellerUser.email
+      
+      emailService.sendOrderCompletedNotification(orderEmailData)
+        .catch(error => console.log('Failed to send order completed emails:', error))
+    }
+
     return {
       message: 'Order completed successfully',
       sellerEarnings,
@@ -1238,8 +1349,8 @@ fastify.patch('/api/orders/:orderId/dispute', {
       where: { id: orderId },
       include: {
         listing: { select: { title: true } },
-        buyer: { select: { username: true } },
-        seller: { select: { username: true } }
+        buyer: { select: { username: true, email: true } },
+        seller: { select: { username: true, email: true } }
       }
     })
 
@@ -1279,6 +1390,32 @@ fastify.patch('/api/orders/:orderId/dispute', {
         isAutomatedDelivery: false
       }
     })
+
+    // Send order disputed notification emails asynchronously
+    const orderEmailData = {
+      orderId: order.id,
+      buyerEmail: order.buyer.email || '',
+      sellerEmail: order.seller.email || '',
+      listingTitle: order.listing.title,
+      amount: order.amount.toNumber() - order.commission.toNumber(),
+      commission: order.commission.toNumber(),
+      total: order.amount.toNumber(),
+      disputeReason: reason.trim()
+    }
+
+    // Get buyer and seller emails
+    const [buyerUser, sellerUser] = await Promise.all([
+      prisma.user.findUnique({ where: { id: order.buyerId }, select: { email: true } }),
+      prisma.user.findUnique({ where: { id: order.sellerId }, select: { email: true } })
+    ])
+
+    if (buyerUser && sellerUser) {
+      orderEmailData.buyerEmail = buyerUser.email
+      orderEmailData.sellerEmail = sellerUser.email
+      
+      emailService.sendOrderDisputedNotification(orderEmailData)
+        .catch(error => console.log('Failed to send order disputed emails:', error))
+    }
 
     return {
       message: 'Dispute initiated successfully. Support team will review this case.',
