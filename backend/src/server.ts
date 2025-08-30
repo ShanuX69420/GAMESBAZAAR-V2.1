@@ -15,12 +15,22 @@ let io: SocketIOServer | null = null
 
 fastify.register(cors, {
   origin: ['http://localhost:3000'], // Frontend URL
-  credentials: true
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS']
 })
 
 fastify.register(jwt, {
   secret: process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-this-in-production'
 })
+
+// Register upload routes
+fastify.register(import('./routes/upload'), { prefix: '/api' })
+
+// Register profile routes
+fastify.register(import('./routes/profile'), { prefix: '/api' })
+
+// Register listings routes
+fastify.register(import('./routes/listings'), { prefix: '/api' })
 
 // Basic health check route
 fastify.get('/', async (request, reply) => {
@@ -410,107 +420,7 @@ const authRequired = async (request: any, reply: any) => {
   }
 }
 
-// Listing Management
-fastify.post('/api/listings', {
-  preHandler: authRequired
-}, async (request, reply) => {
-  try {
-    const { userId } = request.user as { userId: string }
-    const { 
-      gameId, 
-      categoryId, 
-      title, 
-      price, 
-      description, 
-      deliveryType, 
-      stockType, 
-      quantity, 
-      images, 
-      customFields 
-    } = request.body as {
-      gameId: string
-      categoryId: string
-      title: string
-      price: number
-      description: string
-      deliveryType: 'instant' | 'manual'
-      stockType: 'limited' | 'unlimited'
-      quantity?: number
-      images?: string[]
-      customFields?: any
-    }
-
-    // Validation
-    if (!gameId || !categoryId || !title || !price || !description || !deliveryType || !stockType) {
-      reply.status(400)
-      return { error: 'All required fields must be provided' }
-    }
-
-    if (stockType === 'limited' && (!quantity || quantity <= 0)) {
-      reply.status(400)
-      return { error: 'Quantity is required for limited stock items' }
-    }
-
-    // Verify game and category exist
-    const category = await prisma.category.findUnique({
-      where: { id: categoryId },
-      include: { game: true }
-    })
-
-    if (!category || category.gameId !== gameId) {
-      reply.status(404)
-      return { error: 'Game or category not found' }
-    }
-
-    // Check user listing limits (3 per category per game)
-    const existingListings = await prisma.listing.count({
-      where: {
-        sellerId: userId,
-        gameId,
-        categoryId,
-        active: true
-      }
-    })
-
-    if (existingListings >= 3) {
-      reply.status(403)
-      return { error: 'Maximum 3 active listings per category per game. Please delete existing listings or contact support.' }
-    }
-
-    const listing = await prisma.listing.create({
-      data: {
-        sellerId: userId,
-        gameId,
-        categoryId,
-        title,
-        price,
-        description,
-        deliveryType,
-        stockType,
-        quantity: stockType === 'limited' ? quantity : null,
-        images: images || [],
-        customFields: customFields || {},
-        active: true
-      },
-      include: {
-        seller: {
-          select: { id: true, username: true, verified: true }
-        },
-        game: {
-          select: { id: true, name: true, slug: true }
-        },
-        category: {
-          select: { id: true, name: true, slug: true, commissionRate: true }
-        }
-      }
-    })
-
-    return { message: 'Listing created successfully', listing }
-  } catch (error) {
-    reply.status(500)
-    return { error: 'Failed to create listing', details: error instanceof Error ? error.message : 'Unknown error' }
-  }
-})
+// Listing Management - moved to dedicated routes/listings.ts
 
 // Get listings by category with filtering and sorting
 fastify.get('/api/games/:gameSlug/:categorySlug/listings', async (request, reply) => {
@@ -654,53 +564,9 @@ fastify.get('/api/games/:gameSlug/:categorySlug/listings', async (request, reply
   }
 })
 
-// Get user's own listings
-fastify.get('/api/my-listings', {
-  preHandler: authRequired
-}, async (request, reply) => {
-  try {
-    const { userId } = request.user as { userId: string }
-    const { page = '1', limit = '10' } = request.query as { page?: string, limit?: string }
-    
-    const pageNum = parseInt(page)
-    const limitNum = parseInt(limit)
-    const skip = (pageNum - 1) * limitNum
+// Get user's own listings - moved to dedicated routes/listings.ts
 
-    const listings = await prisma.listing.findMany({
-      where: { sellerId: userId },
-      orderBy: { createdAt: 'desc' },
-      skip,
-      take: limitNum,
-      include: {
-        game: {
-          select: { id: true, name: true, slug: true }
-        },
-        category: {
-          select: { id: true, name: true, slug: true }
-        }
-      }
-    })
-
-    const total = await prisma.listing.count({
-      where: { sellerId: userId }
-    })
-
-    return {
-      listings,
-      pagination: {
-        page: pageNum,
-        limit: limitNum,
-        total,
-        pages: Math.ceil(total / limitNum)
-      }
-    }
-  } catch (error) {
-    reply.status(500)
-    return { error: 'Failed to fetch listings' }
-  }
-})
-
-// Get single listing details
+// Get single listing details with seller stats
 fastify.get('/api/listings/:listingId', async (request, reply) => {
   try {
     const { listingId } = request.params as { listingId: string }
@@ -717,10 +583,10 @@ fastify.get('/api/listings/:listingId', async (request, reply) => {
           }
         },
         game: {
-          select: { id: true, name: true, slug: true }
+          select: { id: true, name: true, slug: true, imageUrl: true }
         },
         category: {
-          select: { id: true, name: true, slug: true, fieldsConfig: true }
+          select: { id: true, name: true, slug: true, commissionRate: true, fieldsConfig: true }
         }
       }
     })
@@ -735,8 +601,96 @@ fastify.get('/api/listings/:listingId', async (request, reply) => {
       return { error: 'Listing not available' }
     }
 
-    return listing
+    // Get seller statistics
+    const [
+      totalSales,
+      averageRating,
+      totalReviews,
+      completionRate,
+      recentOrders
+    ] = await Promise.all([
+      // Total completed sales
+      prisma.order.count({
+        where: { 
+          sellerId: listing.sellerId, 
+          status: 'COMPLETED' 
+        }
+      }),
+      
+      // Average rating from reviews
+      prisma.review.aggregate({
+        where: { sellerId: listing.sellerId },
+        _avg: { rating: true },
+        _count: { rating: true }
+      }),
+      
+      // Total reviews count (already included in above query)
+      0, // Will be set from the aggregate result
+      
+      // Completion rate (completed orders / total orders)
+      prisma.order.findMany({
+        where: { sellerId: listing.sellerId },
+        select: { status: true }
+      }),
+      
+      // Recent orders for response time calculation
+      prisma.order.findMany({
+        where: { 
+          sellerId: listing.sellerId,
+          status: { in: ['COMPLETED', 'DELIVERED'] }
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+        select: { 
+          createdAt: true,
+          messages: {
+            where: { senderId: listing.sellerId },
+            orderBy: { createdAt: 'asc' },
+            take: 1,
+            select: { createdAt: true }
+          }
+        }
+      })
+    ])
+
+    // Calculate completion rate
+    const totalOrders = completionRate.length
+    const completed = completionRate.filter(order => order.status === 'COMPLETED').length
+    const calculatedCompletionRate = totalOrders > 0 ? Math.round((completed / totalOrders) * 100) : 100
+
+    // Calculate average response time
+    const responseTimes = recentOrders
+      .filter(order => order.messages.length > 0)
+      .map(order => {
+        const orderTime = new Date(order.createdAt).getTime()
+        const firstResponseTime = new Date(order.messages[0].createdAt).getTime()
+        return (firstResponseTime - orderTime) / (1000 * 60) // in minutes
+      })
+
+    const avgResponseTime = responseTimes.length > 0 
+      ? responseTimes.reduce((sum, time) => sum + time, 0) / responseTimes.length
+      : 0
+
+    const formatResponseTime = (minutes: number): string => {
+      if (minutes < 60) return `${Math.round(minutes)} minutes`
+      if (minutes < 1440) return `${Math.round(minutes / 60)} hours`
+      return `${Math.round(minutes / 1440)} days`
+    }
+
+    const sellerStats = {
+      totalSales,
+      averageRating: averageRating._avg.rating || 0,
+      totalReviews: averageRating._count.rating,
+      responseTime: formatResponseTime(avgResponseTime),
+      completionRate: calculatedCompletionRate
+    }
+
+    return {
+      listing,
+      sellerStats
+    }
   } catch (error) {
+    console.error('Error fetching listing details:', error)
     reply.status(500)
     return { error: 'Failed to fetch listing' }
   }
@@ -749,6 +703,7 @@ fastify.post('/api/orders', {
   try {
     const { userId } = request.user as { userId: string }
     const { listingId } = request.body as { listingId: string }
+
 
     if (!listingId) {
       reply.status(400)
@@ -1315,14 +1270,14 @@ fastify.post('/api/orders/:orderId/messages', {
   try {
     const { userId } = request.user as { userId: string }
     const { orderId } = request.params as { orderId: string }
-    const { content } = request.body as { content: string }
+    const { content, attachmentUrl } = request.body as { content: string; attachmentUrl?: string }
 
-    if (!content || content.trim().length === 0) {
+    if ((!content || content.trim().length === 0) && !attachmentUrl) {
       reply.status(400)
-      return { error: 'Message content is required' }
+      return { error: 'Message content or attachment is required' }
     }
 
-    if (content.length > 1000) {
+    if (content && content.length > 1000) {
       reply.status(400)
       return { error: 'Message content cannot exceed 1000 characters' }
     }
@@ -1356,8 +1311,9 @@ fastify.post('/api/orders/:orderId/messages', {
         orderId,
         senderId: userId,
         receiverId,
-        content: content.trim(),
+        content: content?.trim() || (attachmentUrl ? 'Image' : ''),
         type: 'text',
+        attachmentUrl: attachmentUrl || null,
         isAutomatedDelivery: false
       },
       include: {
@@ -1535,13 +1491,24 @@ fastify.get('/api/messages', {
 
     return {
       conversations: orders.map(order => ({
-        orderId: order.id,
-        orderStatus: order.status,
-        listing: order.listing,
-        otherParty: order.buyerId === userId ? order.seller : order.buyer,
-        lastMessage: order.messages[0] || null,
-        unreadCount: order._count.messages,
-        createdAt: order.createdAt
+        order_id: order.id,
+        other_user: order.buyerId === userId ? order.seller : order.buyer,
+        listing: {
+          id: order.listing.id,
+          title: order.listing.title
+        },
+        order: {
+          status: order.status,
+          amount: order.amount.toString()
+        },
+        last_message: order.messages[0] ? {
+          id: order.messages[0].id,
+          content: order.messages[0].content,
+          sender_id: order.messages[0].senderId,
+          type: order.messages[0].type,
+          created_at: order.messages[0].createdAt.toISOString()
+        } : null,
+        unread_count: order._count.messages
       })),
       pagination: {
         page: pageNum,

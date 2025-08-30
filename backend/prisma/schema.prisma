@@ -15,6 +15,11 @@ model User {
   role         String   @default("user") // user, admin, moderator, support
   verified     Boolean  @default(false)
   balance      Decimal  @default(0) @db.Decimal(10, 2)
+  avatarUrl    String?  @map("avatar_url")
+  bio          String?
+  languages    String[] @default(["English"])
+  vacationMode Boolean  @default(false) @map("vacation_mode")
+  lastBoostAt  DateTime? @map("last_boost_at")
   createdAt    DateTime @default(now()) @map("created_at")
   
   // Relations
