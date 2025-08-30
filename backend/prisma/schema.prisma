@@ -20,6 +20,8 @@ model User {
   languages    String[] @default(["English"])
   vacationMode Boolean  @default(false) @map("vacation_mode")
   lastBoostAt  DateTime? @map("last_boost_at")
+  averageRating Decimal @default(0) @db.Decimal(3, 2) @map("average_rating") // 0.00 to 5.00
+  totalReviews Int      @default(0) @map("total_reviews")
   createdAt    DateTime @default(now()) @map("created_at")
   
   // Relations

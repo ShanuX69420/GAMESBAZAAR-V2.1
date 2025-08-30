@@ -23,6 +23,15 @@ fastify.register(jwt, {
   secret: process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-this-in-production'
 })
 
+// Add JWT authentication middleware
+fastify.decorate('authenticate', async function (request: any, reply: any) {
+  try {
+    await request.jwtVerify()
+  } catch (err) {
+    reply.status(401).send({ error: 'Unauthorized' })
+  }
+})
+
 // Register upload routes
 fastify.register(import('./routes/upload'), { prefix: '/api' })
 
@@ -31,6 +40,12 @@ fastify.register(import('./routes/profile'), { prefix: '/api' })
 
 // Register listings routes
 fastify.register(import('./routes/listings'), { prefix: '/api' })
+
+// Register reviews routes
+fastify.register(import('./routes/reviews'), { prefix: '/api' })
+
+// Register payment routes
+fastify.register(import('./routes/payments'), { prefix: '/api' })
 
 // Basic health check route
 fastify.get('/', async (request, reply) => {
@@ -702,8 +717,10 @@ fastify.post('/api/orders', {
 }, async (request, reply) => {
   try {
     const { userId } = request.user as { userId: string }
-    const { listingId } = request.body as { listingId: string }
-
+    const { listingId, paymentMethod } = request.body as { 
+      listingId: string
+      paymentMethod?: 'jazzcash' | 'easypaisa' | 'bank_transfer'
+    }
 
     if (!listingId) {
       reply.status(400)
@@ -760,7 +777,7 @@ fastify.post('/api/orders', {
         amount: totalAmount,
         commission,
         status: 'PENDING',
-        paymentMethod: null, // Will be set when payment is processed
+        paymentMethod: paymentMethod || null, // Set payment method if provided
       },
       include: {
         listing: {
